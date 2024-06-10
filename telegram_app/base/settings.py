@@ -1,6 +1,16 @@
 import os
 
 
+SQL_ENGINE = os.environ.get('SQL_ENGINE', 'postgres')
+SQL_USER = os.environ.get('SQL_USER', 'postgres')
+SQL_PASSWORD = os.environ.get('SQL_PASSWORD', 'postgres')
+SQL_HOST = os.environ.get('SQL_HOST', '5432')
+SQL_PORT = os.environ.get('SQL_PORT', '5433')
+SQL_DATABASE = os.environ.get('SQL_DATABASE', '')
+
+REDIS_URL = os.environ.get('REDIS_URL', '')
+
+
 # Telegram
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 

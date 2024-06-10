@@ -4,8 +4,8 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 import tweepy
 import requests
 from io import BytesIO
-from app.base.settings import TELEGRAM_TOKEN
-from app.clients import TwitterClient
+from telegram_app.base.settings import TELEGRAM_TOKEN
+from telegram_app.clients import TwitterClient
 
 
 twitter_client = TwitterClient()
@@ -98,6 +98,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     if isinstance(update, Update) and update.message:
         await update.message.reply_text('Виникла помилка. Спробуйте пізніше.')
 
+
 def main() -> None:
     """Запускає бота."""
     application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -112,6 +113,7 @@ def main() -> None:
 
     # Збільшення інтервалу опитування
     application.run_polling(poll_interval=5.0)  # Додавання інтервалу
+
 
 if __name__ == '__main__':
     main()
