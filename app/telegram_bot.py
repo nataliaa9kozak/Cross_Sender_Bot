@@ -2,40 +2,17 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, CallbackQueryHandler, filters
 import tweepy
-import time
 import requests
 from io import BytesIO
+from app.base.settings import TELEGRAM_TOKEN
+from app.clients import TwitterClient
 
-# Заповніть наступні змінні своїми значеннями
-TELEGRAM_TOKEN = '6661258189:AAGI2sUAZQXNPweGWO2RRoLf4W2urfFf1D4'
-API_KEY = 'CNzrdKYT7bIQPt4smw3j8kV81'
-API_SECRET_KEY = 'rDnyTckJBQt1rm2RyfLuJxahlOFVzky4c09p0PkO5IR1LAJ8My'
-ACCESS_TOKEN = '1791183108571602944-2yMUvWWbLuyB71J5PKGpBKtDb1M6PL'
-ACCESS_TOKEN_SECRET = 'B3LIZpq6dLEPWRwsPELHzlxiaK5ClNLeOWn9gBEFKiIjB'
-BEARER_TOKEN = 'AAAAAAAAAAAAAAAAAAAAAFnHuAEAAAAAPOigsFR44gNrlNxZ%2FE9VL9CJ5sI%3DD82n1grMxh5QY1ZBfAv85aUKgjg0DoCvbVwqKLwugVDaPHjRBD'
 
-# Аутентифікація з використанням ключів та токенів
-client_v2 = tweepy.Client(bearer_token=BEARER_TOKEN, consumer_key=API_KEY, consumer_secret=API_SECRET_KEY,
-                          access_token=ACCESS_TOKEN, access_token_secret=ACCESS_TOKEN_SECRET)
-auth = tweepy.OAuth1UserHandler(API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-client_v1 = tweepy.API(auth)
+twitter_client = TwitterClient()
 
 # Логування
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Приклад функції для відправлення твітів
-def send_tweet(message, media_ids=None):
-    retries = 3
-    for _ in range(retries):
-        try:
-            response = client_v2.create_tweet(text=message, media_ids=media_ids)
-            print("Tweet sent:", response)
-            return True
-        except tweepy.TweepyException as e:
-            print(f"Error: {e}")
-            time.sleep(5)
-    print("Failed to send tweet after retries")
-    return False
 
 # Функція для обробки команди /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -46,6 +23,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text('Вітаю! Я ваш Телеграм бот. Що ви хочете зробити?', reply_markup=reply_markup)
+
 
 # Функція для обробки команд меню
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -58,26 +36,29 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif query.data == 'status':
         await query.edit_message_text(text="Бот працює нормально.")
 
+
 # Функція для обробки команди /tweet
 async def tweet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отримує текст з повідомлення та надсилає його у Twitter."""
     user_says = ' '.join(context.args)
     if user_says:
-        if send_tweet(user_says):
+        if twitter_client.send_message(user_says):
             await update.message.reply_text('Успішно опубліковано у Twitter!')
         else:
             await update.message.reply_text('Помилка при надсиланні у Twitter.')
     else:
         await update.message.reply_text('Будь ласка, введіть текст, який ви хочете опублікувати.')
 
+
 # Функція для обробки текстових повідомлень
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обробляє текстові повідомлення."""
     user_says = update.message.text
-    if send_tweet(user_says):
+    if twitter_client.send_message(user_says):
         await update.message.reply_text('Успішно опубліковано у Twitter!')
     else:
         await update.message.reply_text('Помилка при надсиланні у Twitter.')
+
 
 # Функція для обробки медіа повідомлень
 async def handle_media_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -97,17 +78,18 @@ async def handle_media_message(update: Update, context: ContextTypes.DEFAULT_TYP
     image = BytesIO(response.content)
 
     try:
-        media_response = client_v1.media_upload(filename="image.jpg", file=image)
+        media_response = twitter_client.send_media(image)
         media_ids.append(media_response.media_id_string)
     except tweepy.TweepyException as e:
         print(f"Error uploading media: {e}")
         await update.message.reply_text('Помилка при завантаженні зображення у Twitter.')
         return
 
-    if send_tweet(user_says, media_ids=media_ids):
+    if twitter_client.send_message(user_says, media_ids=media_ids):
         await update.message.reply_text('Успішно опубліковано у Twitter!')
     else:
         await update.message.reply_text('Помилка при надсиланні у Twitter.')
+
 
 # Функція для обробки помилок
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
