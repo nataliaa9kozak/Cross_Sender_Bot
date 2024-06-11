@@ -10,6 +10,8 @@ SQL_DATABASE = os.environ.get('SQL_DATABASE', '')
 
 REDIS_URL = os.environ.get('REDIS_URL', '')
 
+BACKEND_URL = os.environ.get('BACKEND_URL', '')
+
 
 # Telegram
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
