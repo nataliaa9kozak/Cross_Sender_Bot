@@ -160,7 +160,7 @@ async def email_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Відмінити", ReplyKeyboardRemove())
+    await update.message.reply_text("Відмінити", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 
@@ -255,7 +255,7 @@ def main() -> None:
                 ),
             ],
         },
-        fallbacks=[MessageHandler(filters.Regex(f"^{cancel_word}$"), cancel)],
+        fallbacks=[MessageHandler(filters.Text(cancel_word), cancel)],
     )
     application.add_handler(register_handler)
 
