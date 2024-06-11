@@ -1,6 +1,6 @@
-FROM python:3.12 alpine
+FROM python:3.12-alpine
 
-WORKDIR /usr/src/app
+WORKDIR /usr/src/telegram_app
 
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONFAULTHANDLER 1
@@ -16,5 +16,5 @@ RUN pip install -r requirements.txt
 COPY . .
 
 RUN adduser -S -D -u 1000 docker_user
-RUN chown -R 1000:1000 /usr/src/web
+RUN chown -R 1000:1000 /usr/src/telegram_app
 USER docker_user
