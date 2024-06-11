@@ -1,6 +1,6 @@
 from .client import SocialClient
 import tweepy
-from telegram_app.base.settings import (
+from base.settings import (
     TWITTER_BEARER_TOKEN,
     TWITTER_API_KEY,
     TWITTER_API_SECRET_KEY,

@@ -1,6 +1,6 @@
 import requests
 from .client import SocialClient, ClientException
-from telegram_app.base.settings import (
+from base.settings import (
     FACEBOOK_ACCESS_TOKEN,
     FACEBOOK_PAGE_ID,
 )
