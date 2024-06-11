@@ -5,7 +5,7 @@ import tweepy
 import requests
 from io import BytesIO
 from base.settings import TELEGRAM_TOKEN
-from clients import TwitterClient, BackendClient
+from clients import TwitterClient, FacebookClient, BackendClient
 from typing import Dict
 import re
 from enum import Enum, auto
@@ -15,6 +15,7 @@ from utils import format_user_input
 
 backend_client = BackendClient()
 twitter_client = TwitterClient()
+facebook_client = FacebookClient()
 
 # Логування
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -24,7 +25,9 @@ class AppStates(Enum):
     START = auto()
     REGISTRATION_WAITING_EMAIL = auto()
     MENU = auto()
+    POSTS = auto()
     TWEET = auto()
+    FACEBOOK = auto()
     CONFIG_MENU = auto()
     CONFIGS = auto()
     CONFIG_UPDATE = auto()
@@ -35,8 +38,13 @@ cancel_word = '/cancel'
 configs_command = 'configs'
 view_command = 'view'
 update_command = 'update'
+posts_command = 'posts'
+tweet_command = 'tweet'
+facebook_command = 'facebook'
+
 cancel_markup = ReplyKeyboardMarkup([[cancel_word]])
-menu_markup = ReplyKeyboardMarkup([["tweet", "status", "configs"], [cancel_word]])
+menu_markup = ReplyKeyboardMarkup([[posts_command, "status", configs_command], [cancel_word]])
+posts_markup = ReplyKeyboardMarkup([[tweet_command, facebook_command], [cancel_word]])
 configs_markup = ReplyKeyboardMarkup([[view_command, update_command], [cancel_word]])
 
 
@@ -63,6 +71,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_text(text="Бот працює нормально.")
 
 
+async def posts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отримує текст з повідомлення та надсилає його у Twitter."""
+    await update.message.reply_text('Опції для автоматичної розсилки', reply_markup=posts_markup)
+    return AppStates.POSTS
+
+
 # Функція для обробки команди /tweet
 async def tweet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отримує текст з повідомлення та надсилає його у Twitter."""
@@ -70,11 +84,26 @@ async def tweet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     return AppStates.TWEET
 
 
+async def facebook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отримує текст з повідомлення та надсилає його у Twitter."""
+    await update.message.reply_text('Будь ласка, введіть текст, який ви хочете опублікувати.', reply_markup=cancel_markup)
+    return AppStates.FACEBOOK
+
+
 # Функція для обробки текстових повідомлень
-async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_tweet_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обробляє текстові повідомлення."""
     user_says = update.message.text
     if twitter_client.send_message(user_says):
+        await update.message.reply_text('Успішно опубліковано у Twitter!')
+    else:
+        await update.message.reply_text('Помилка при надсиланні у Twitter.')
+
+
+async def handle_facebook_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обробляє текстові повідомлення."""
+    user_says = update.message.text
+    if facebook_client.send_message(user_says):
         await update.message.reply_text('Успішно опубліковано у Twitter!')
     else:
         await update.message.reply_text('Помилка при надсиланні у Twitter.')
@@ -225,18 +254,34 @@ def main() -> None:
             ],
             AppStates.MENU: [
                 MessageHandler(
-                    filters.Regex("^tweet"),
-                    tweet
+                    filters.Text(posts_command),
+                    posts_menu
                 ),
                 MessageHandler(
                     filters.Text(configs_command),
                     configs_menu
                 ),
             ],
+            AppStates.POSTS: [
+                MessageHandler(
+                    filters.Text(tweet_command),
+                    tweet
+                ),
+                MessageHandler(
+                    filters.Text(facebook_command),
+                    facebook
+                ),
+            ],
             AppStates.TWEET: [
                 MessageHandler(
                     filters.TEXT,
-                    handle_text_message
+                    handle_tweet_message
+                ),
+            ],
+            AppStates.FACEBOOK: [
+                MessageHandler(
+                    filters.TEXT,
+                    handle_facebook_message
                 ),
             ],
             AppStates.CONFIG_MENU: [
