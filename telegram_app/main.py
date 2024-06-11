@@ -31,7 +31,7 @@ class AppStates(Enum):
 
 
 # Registration
-cancel_word = 'cancel'
+cancel_word = '/cancel'
 configs_command = 'configs'
 view_command = 'view'
 update_command = 'update'
@@ -213,6 +213,7 @@ def main() -> None:
             CommandHandler("register", register),
             CommandHandler("start", start),
             CommandHandler("tweet", tweet),
+            CommandHandler("cancel", cancel),
             # CommandHandler("configs", configs_menu)
         ],
         states={
