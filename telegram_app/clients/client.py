@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from functools import wraps
+import httpx
 
 
 class SocialClient(ABC):
@@ -13,3 +15,13 @@ class SocialClient(ABC):
 
 class ClientException(Exception):
     pass
+
+
+def handle_client_exception(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except httpx.HTTPError as e:
+            print(e)
+    return wrapper
