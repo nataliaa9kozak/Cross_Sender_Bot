@@ -1,28 +1,54 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, CallbackQueryHandler, filters
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, ConversationHandler
 import tweepy
 import requests
 from io import BytesIO
-from telegram_app.base.settings import TELEGRAM_TOKEN
-from telegram_app.clients import TwitterClient
+from base.settings import TELEGRAM_TOKEN
+from clients import TwitterClient, BackendClient
+from typing import Dict
+import re
+from enum import Enum, auto
+import json
+from utils import format_user_input
 
 
+backend_client = BackendClient()
 twitter_client = TwitterClient()
 
 # Логування
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
+class AppStates(Enum):
+    START = auto()
+    REGISTRATION_WAITING_EMAIL = auto()
+    MENU = auto()
+    TWEET = auto()
+    CONFIG_MENU = auto()
+    CONFIGS = auto()
+    CONFIG_UPDATE = auto()
+
+
+# Registration
+cancel_word = 'cancel'
+configs_command = 'configs'
+view_command = 'view'
+update_command = 'update'
+cancel_markup = ReplyKeyboardMarkup([[cancel_word]])
+menu_markup = ReplyKeyboardMarkup([["tweet", "status", "configs"], [cancel_word]])
+configs_markup = ReplyKeyboardMarkup([[view_command, update_command], [cancel_word]])
+
+
 # Функція для обробки команди /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Відправляє привітальне повідомлення та меню."""
-    keyboard = [
-        [InlineKeyboardButton("Надіслати твіт", callback_data='tweet')],
-        [InlineKeyboardButton("Статус бота", callback_data='status')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Вітаю! Я ваш Телеграм бот. Що ви хочете зробити?', reply_markup=reply_markup)
+    exist = await backend_client.is_telegram_id_exist(update.message.from_user.id)
+    if not exist:
+        await update.message.reply_text('Ви не зареєстровані, напишіть /register, щоб зареєструватись.')
+        return ConversationHandler.END
+    await update.message.reply_text('Вітаю! Я ваш Телеграм бот. Що ви хочете зробити?', reply_markup=menu_markup)
+    return AppStates.MENU
 
 
 # Функція для обробки команд меню
@@ -40,14 +66,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # Функція для обробки команди /tweet
 async def tweet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отримує текст з повідомлення та надсилає його у Twitter."""
-    user_says = ' '.join(context.args)
-    if user_says:
-        if twitter_client.send_message(user_says):
-            await update.message.reply_text('Успішно опубліковано у Twitter!')
-        else:
-            await update.message.reply_text('Помилка при надсиланні у Twitter.')
-    else:
-        await update.message.reply_text('Будь ласка, введіть текст, який ви хочете опублікувати.')
+    await update.message.reply_text('Будь ласка, введіть текст, який ви хочете опублікувати.', reply_markup=cancel_markup)
+    return AppStates.TWEET
 
 
 # Функція для обробки текстових повідомлень
@@ -91,6 +111,11 @@ async def handle_media_message(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text('Помилка при надсиланні у Twitter.')
 
 
+async def cancel_tweet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Відмінити твіт")
+    return ConversationHandler.END
+
+
 # Функція для обробки помилок
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Логування помилок, викликаних оновленнями."""
@@ -99,15 +124,140 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text('Виникла помилка. Спробуйте пізніше.')
 
 
+def facts_to_str(user_data: Dict[str, str]) -> str:
+    """Helper function for formatting the gathered user info."""
+    facts = [f"{key} - {value}" for key, value in user_data.items()]
+    return "\n".join(facts).join(["\n", "\n"])
+
+
+async def register(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start the conversation and ask user for input."""
+    id_exist = await backend_client.is_telegram_id_exist(update.message.from_user.id)
+    if id_exist:
+        await update.message.reply_text("Ви вже зареєстровані", reply_markup=menu_markup)
+        return AppStates.MENU
+    await update.message.reply_text("Введіть пошту", reply_markup=cancel_markup)
+
+    return AppStates.REGISTRATION_WAITING_EMAIL
+
+
+async def email_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Ask the user for info about the selected predefined choice."""
+    email = update.message.text
+    email_exist = await backend_client.is_email_exist(email)
+
+    if email_exist:
+        await update.message.reply_text("Ця пошта вже зареєстрована", reply_markup=cancel_markup)
+        return AppStates.REGISTRATION_WAITING_EMAIL
+
+    if (re.match(r'^[^@]+@[^@]+\.[^@]+$', email)):
+        print('update.message.from_user', update.message.from_user)
+        await backend_client.create_user(email=email, telegram_id=update.message.from_user.id)
+        await update.message.reply_text(f"Success", reply_markup=ReplyKeyboardRemove())
+    else:
+        await update.message.reply_text("Пошта не валідна")
+    return ConversationHandler.END
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Відмінити", ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+
+async def configs_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text('Конфіги', reply_markup=configs_markup)
+    return AppStates.CONFIG_MENU
+
+
+async def view_configs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    configs = await backend_client.get_configs(update.message.from_user.id)
+    await update.message.reply_text(json.dumps(configs), reply_markup=configs_markup)
+    return AppStates.CONFIG_MENU
+
+
+async def update_config_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        'Update or create if not exist:\n'
+        + 'Update structure:\n'
+        + 'social_media\n'
+        + 'KEY=VALUE\n'
+        + 'KEY=VALUE\n',
+        reply_markup=configs_markup
+    )
+    return AppStates.CONFIG_UPDATE
+
+
+async def update_config(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    social_media, content = format_user_input(update.message.text)
+    print(social_media, content)
+
+    await backend_client.update_config(
+        social_media=social_media,
+        content=content,
+        telegram_id=update.message.from_user.id
+    )
+    await update.message.reply_text(
+        'Збережено', reply_markup=configs_markup
+    )
+    return AppStates.CONFIG_MENU
+
+
 def main() -> None:
     """Запускає бота."""
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("tweet", tweet))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_media_message))
-    application.add_handler(CallbackQueryHandler(button))
+    # conversation example
+    # https://github.com/python-telegram-bot/python-telegram-bot/blob/master/examples/conversationbot2.py
+    register_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler("register", register),
+            CommandHandler("start", start),
+            CommandHandler("tweet", tweet),
+            # CommandHandler("configs", configs_menu)
+        ],
+        states={
+            AppStates.REGISTRATION_WAITING_EMAIL: [
+                MessageHandler(
+                    filters.TEXT,
+                    email_input
+                ),
+            ],
+            AppStates.MENU: [
+                MessageHandler(
+                    filters.Regex("^tweet"),
+                    tweet
+                ),
+                MessageHandler(
+                    filters.Text(configs_command),
+                    configs_menu
+                ),
+            ],
+            AppStates.TWEET: [
+                MessageHandler(
+                    filters.TEXT,
+                    handle_text_message
+                ),
+            ],
+            AppStates.CONFIG_MENU: [
+                MessageHandler(
+                    filters.Regex(f"^{view_command}"),
+                    view_configs
+                ),
+                MessageHandler(
+                    filters.Text(update_command),
+                    update_config_menu
+                ),
+            ],
+            AppStates.CONFIG_UPDATE: [
+                MessageHandler(
+                    filters.TEXT,
+                    update_config
+                ),
+            ],
+        },
+        fallbacks=[MessageHandler(filters.Regex(f"^{cancel_word}$"), cancel)],
+    )
+    application.add_handler(register_handler)
 
     application.add_error_handler(error_handler)
 
